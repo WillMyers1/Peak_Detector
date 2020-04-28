@@ -142,7 +142,7 @@ BEGIN
 		
 	WHEN data_check =>
 	  if seqDone = '1' then 
- 	    nextState <= DataReady; 
+ 	    nextState <= Data_Ready; 
 	  else 
 	    nextState <= TRANSMIT2_OFF;
 	  end if; 

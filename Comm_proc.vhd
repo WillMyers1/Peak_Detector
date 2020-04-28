@@ -2,7 +2,7 @@ library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
 
-entity Comm_Proc is
+entity cmdProc is
 port(
   clk: in std_ulogic;
   reset: in std_ulogic;
@@ -24,7 +24,7 @@ port(
   );
 end;
 
-ARCHITECTURE myarch OF Comm_Proc IS
+ARCHITECTURE myarch OF cmdProc IS
 
   COMPONENT counter
 	PORT(
