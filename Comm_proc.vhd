@@ -1,26 +1,30 @@
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
+use work.common_pack.all;
+library UNISIM;
+use UNISIM.VCOMPONENTS.ALL;
+use UNISIM.VPKG.ALL;
 
 entity cmdProc is
 port(
-  clk: in std_ulogic;
-  reset: in std_ulogic;
-  dataReady: in std_ulogic;
-  seqDone: in std_ulogic;
-  rxNow: in std_ulogic;
-  ovErr: in std_ulogic;
-  framErr: in std_ulogic;
-  txDone: in std_ulogic;
-  byte: in std_ulogic_vector(7 downto 0);
-  maxIndex: in std_ulogic_vector(11 downto 0);
-  dataResults: in std_ulogic_vector(55 downto 0);
-  rxData: in std_ulogic_vector(7 downto 0);
-  start: out std_ulogic;
-  rxDone: out std_ulogic;
-  txNow: out std_ulogic;
-  numWords_bcd: out std_ulogic_vector(11 downto 0);
-  txData: out std_ulogic_vector(7 downto 0)
+ clk:		in std_logic;
+ reset:		in std_logic;
+ rxnow:		in std_logic;
+ rxData:			in std_logic_vector (7 downto 0);
+ txData:			out std_logic_vector (7 downto 0);
+ rxdone:		out std_logic;
+ ovErr:		in std_logic;
+ framErr:	in std_logic;
+ txnow:		out std_logic;
+ txdone:		in std_logic;
+ start: out std_logic;
+ numWords_bcd: out BCD_ARRAY_TYPE(2 downto 0);
+ dataReady: in std_logic;
+ byte: in std_logic_vector(7 downto 0);
+ maxIndex: in BCD_ARRAY_TYPE(2 downto 0);
+ dataResults: in CHAR_ARRAY_TYPE(0 to RESULT_BYTE_NUM-1);
+ seqDone: in std_logic
   );
 end;
 
@@ -28,26 +32,26 @@ ARCHITECTURE myarch OF cmdProc IS
 
   COMPONENT counter
 	PORT(
-	     clk: in std_ulogic;
-             rst: in std_ulogic;
-       	     en: in std_ulogic;
-             cntOut: out std_ulogic_vector(5 downto 0)
+	     clk: in std_logic;
+             rst: in std_logic;
+       	     en: in std_logic;
+             cntOut: out std_logic_vector(5 downto 0)
 	     );
   END COMPONENT;
-  SIGNAL rst0, en0:STD_uLOGIC;
-  SIGNAL cnt0Out:STD_uLOGIC_VECTOR(5 downto 0);
+  SIGNAL rst0, en0:STD_LOGIC;
+  SIGNAL cnt0Out:STD_LOGIC_VECTOR(5 downto 0);
   
   COMPONENT reg
     PORT(
-	 clk: in std_ulogic;
-	 regreset: in std_ulogic;
-         load: in std_ulogic;
-         D: in std_ulogic_vector(7 downto 0);
-         Q: out std_ulogic_vector(7 downto 0)
+	 clk: in std_logic;
+	 regreset: in std_logic;
+         load: in std_logic;
+         D: in std_logic_vector(7 downto 0);
+         Q: out std_logic_vector(7 downto 0)
          );
     END COMPONENT;
-	SIGNAL regreset0, load0: std_ulogic;
-	SIGNAL D0, Q0: std_ulogic_vector(7 downto 0);
+	SIGNAL regreset0, load0: std_logic;
+	SIGNAL D0, Q0: std_logic_vector(7 downto 0);
   
   FOR cnt0: counter USE ENTITY work.myCounter(Behavioral);
   FOR reg0: reg USE ENTITY work.myRegister(Behavioral);
