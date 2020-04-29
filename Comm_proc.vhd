@@ -56,72 +56,80 @@ ARCHITECTURE myarch OF cmdProc IS
   FOR cnt0: counter USE ENTITY work.myCounter(Behavioral);
   FOR reg0: reg USE ENTITY work.myRegister(Behavioral);
   
-  TYPE state_type IS (INIT, TRANSMIT1, valid_wait, Num_Recog, Word_Num, START1, data_wait, TRANSMIT2, TRANSMIT2_OFF, data_check, Data_Ready); 
+  TYPE state_type IS (STATE1,INIT,COUNT_CHECK, A_CHECK, NUM_CHECK, ERROR, CORRECT_WORD, START1, data_wait, TRANSMIT2, TRANSMIT2_OFF, data_check, Data_Ready); 
   SIGNAL curState, nextState: state_type;
 
 
 BEGIN
  cnt0: counter PORT MAP(clk, rst0, en0, cnt0Out);
  reg0: reg PORT MAP(clk, regreset0, load0, D0, Q0);
- combi_nextState: PROCESS(curState)
+ combi_nextState: PROCESS(curState, rxNow, rxData, cnt0Out)
  
    BEGIN
     CASE curState IS
 	
+	WHEN STATE1 =>
+	nextState <= INIT;
+	
 	WHEN INIT =>
 	 if rxNow = '1' then 
-		nextState <= TRANSMIT1;
-	 elsif rxNow = '0' then 
-		nextState <= INIT;
+		nextState <= COUNT_CHECK;
+	 else 
+		nextState <= curState;
 	 end if; 
 	 
-	WHEN TRANSMIT1 =>
-	 if rxData = "01000001" then --if dataIn = A
-	    nextState <= valid_wait;
-	 elsif rxData = "01100001" then --if dataIn = a
-	    nextState <= valid_wait;
+	WHEN COUNT_CHECK =>
+	 if cnt0Out = "000000" then
+	    nextState <= A_CHECK;
 	 else
-		nextState <= INIT;
-	 end if;
-	
-	WHEN valid_wait =>
-	 if rxNow = '1' then 
-		nextState <= Num_Recog;
-	 else 
-		nextState <= valid_wait;
+		nextState <= NUM_CHECK;
 	 end if;
 	 
-	WHEN Num_Recog =>
+	WHEN A_CHECK =>
+	 if rxData = "01000001" then --if dataIn = A
+	    nextState <= CORRECT_WORD;
+	 elsif rxData = "01100001" then --if dataIn = a
+	    nextState <= CORRECT_WORD;
+	 else
+		nextState<= ERROR;
+	 end if;
+	 
+	WHEN NUM_CHECK =>
 	 if rxData = "00110000" then  --0
-		nextState <= Word_Num;
+		nextState <= CORRECT_WORD;
 	elsif rxData = "00110001" then --1
-		nextState <= Word_Num;
+		nextState <= CORRECT_WORD;
 	elsif rxData = "00110010" then --2
-		nextState <= Word_Num;
+		nextState <= CORRECT_WORD;
 	elsif rxData = "00110011" then --3
-		nextState <= Word_Num;
+		nextState <= CORRECT_WORD;
 	elsif rxData = "00110100" then --4
-		nextState <= Word_Num;
+		nextState <= CORRECT_WORD;
 	elsif rxData = "00110101" then --5
-		nextState <= Word_Num;
+		nextState <= CORRECT_WORD;
 	elsif rxData = "00110110" then --6
-		nextState <= Word_Num;
+		nextState <= CORRECT_WORD;
 	elsif rxData = "00110111" then --7
-		nextState <= Word_Num;
+		nextState <= CORRECT_WORD;
 	elsif rxData = "00111000" then --8
-		nextState <= Word_Num;
+		nextState <= CORRECT_WORD;
 	elsif rxData = "00111001" then --9
-		nextState <= Word_Num;
+		nextState <= CORRECT_WORD;
 	else 
 		nextState <= INIT;
 	end if; 
 	
-	WHEN Word_Num =>
+	WHEN ERROR => 
+		nextState <= INIT;
+	
+	WHEN CORRECT_WORD =>
 	  if cnt0Out >= "000011" then 
 		nextState <= START1;
 	  elsif 
              cnt0Out < "000011" then 
-		nextState <= valid_wait;
+		nextState <= INIT;
+	  else
+	  nextState <= curState;
 	  end if; 
 	  
 	WHEN START1 =>
@@ -131,7 +139,7 @@ BEGIN
 	  if dataReady = '1' then 
 		nextState <= TRANSMIT2; 
 	  else 
-		null;
+	    nextState <= curState;
           end if;
 		
 	WHEN TRANSMIT2 =>
@@ -140,8 +148,8 @@ BEGIN
 	WHEN TRANSMIT2_OFF =>
 	  if txDone = '1' then 
 	    nextState <= data_check;
-	  else 
-	    null; 
+	  else
+	  nextState <= curState; 
           end if;
 		
 	WHEN data_check =>
@@ -153,6 +161,9 @@ BEGIN
 	
 	WHEN Data_Ready =>
 	  nextState <= INIT; 
+	  
+	 WHEN others =>
+	   nextState <= INIT;
 	
     end CASE;
   end PROCESS; 
@@ -165,29 +176,41 @@ BEGIN
   rst0 <= '0';
   regreset0 <= '0';
   load0 <= '0';
-  D0 <= "00000000";
-
-  if curState = INIT then 
+  rxdone <= '0';
+  txData <= Q0;
+  --if curState = INIT then 
   --INITIAL CONDITIONS 
+  --end if;
+  if curState = STATE1 then
+  rst0 <= '1';
   end if;
   
-  if curState = TRANSMIT1 then 
-  txNow <= '1';
-  end if; 
-  
-  if curState = Num_Recog then 
-  txNow <= '1'; 
-  end if; 
-  
-  if curState = Word_Num then 
-  load0 <= '1';
+  if curState = COUNT_CHECK then
   D0 <= rxData;
-  en0 <= '1'; -- need to find number of clock cycles for when there are 3 numbers. 
+  end if;
+  
+  if curState = A_CHECK then 
+  load0 <= '1';
+  end if; 
+  
+  if curState = NUM_CHECK then 
+  load0 <= '1'; 
+  end if; 
+  
+  if curState = ERROR then 
+  rst0 <= '1';
+  rxdone <= '1';
+  end if; 
+  
+  if curState = CORRECT_WORD then 
+  txData <= Q0;
+  en0 <= '1';
+  rxdone <= '1';-- need to find number of clock cycles for when there are 3 numbers. 
   end if; 
   
   if curState = START1 then 
   start <= '1'; 
-  txData <= byte; --NNN
+  D0 <= byte; --NNN
   end if; 
   
   if curState = TRANSMIT2 then 
@@ -202,8 +225,8 @@ BEGIN
 
   seq_state: PROCESS (clk, reset)
   BEGIN
-    if reset = '0' then
-      curState <= INIT;
+    if reset = '1' then
+      curState <= STATE1;
     elsif clk'EVENT AND clk='1' then
       curState <= nextState;
     end if;
