@@ -1,30 +1,31 @@
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
+
 use work.common_pack.all;
+
 library UNISIM;
 use UNISIM.VCOMPONENTS.ALL;
-use UNISIM.VPKG.ALL;
 
 entity cmdProc is
 port(
  clk:		in std_logic;
  reset:		in std_logic;
  rxnow:		in std_logic;
- rxData:			in std_logic_vector (7 downto 0);
- txData:			out std_logic_vector (7 downto 0);
- rxdone:		out std_logic;
+ rxData:    in std_logic_vector (7 downto 0);
+ txData:	out std_logic_vector (7 downto 0);
+ rxdone:	out std_logic;
  ovErr:		in std_logic;
  framErr:	in std_logic;
  txnow:		out std_logic;
- txdone:		in std_logic;
- start: out std_logic;
- numWords_bcd: out BCD_ARRAY_TYPE(2 downto 0);
+ txdone:	in std_logic;
+ start:     out std_logic;
+ numWords_bcd:out BCD_ARRAY_TYPE(2 downto 0);
  dataReady: in std_logic;
- byte: in std_logic_vector(7 downto 0);
- maxIndex: in BCD_ARRAY_TYPE(2 downto 0);
- dataResults: in CHAR_ARRAY_TYPE(0 to RESULT_BYTE_NUM-1);
- seqDone: in std_logic
+ byte:      in std_logic_vector(7 downto 0);
+ maxIndex:  in BCD_ARRAY_TYPE(2 downto 0);
+ dataResults:in CHAR_ARRAY_TYPE(0 to RESULT_BYTE_NUM-1);
+ seqDone:   in std_logic
   );
 end;
 
@@ -52,20 +53,34 @@ ARCHITECTURE myarch OF cmdProc IS
     END COMPONENT;
 	SIGNAL regreset0, load0: std_logic;
 	SIGNAL D0, Q0: std_logic_vector(7 downto 0);
-  
-  FOR cnt0: counter USE ENTITY work.myCounter(Behavioral);
+	
+	COMPONENT shift
+	   PORT (
+        shift_in : in std_logic_vector(7 downto 0); -- DATA IN
+        en_shift : in std_logic; -- CHIP ENABLE
+        load_shift : in std_logic;
+        clk : in std_logic; -- CLOCK
+        shift_out : out BCD_ARRAY_TYPE(2 downto 0) -- SHIFTER OUTPUT
+        );
+    END COMPONENT;
+    SIGNAL shift_in: std_logic_vector(7 downto 0);              
+    SIGNAL shift_out: BCD_ARRAY_TYPE(2 downto 0);
+    SIGNAL en1, load1 : std_logic;
+     
+  FOR cnt0: counter USE ENTITY work.myCounter(Behavioral); 
   FOR reg0: reg USE ENTITY work.myRegister(Behavioral);
-  
-  TYPE state_type IS (STATE1,INIT,COUNT_CHECK, A_CHECK, NUM_CHECK, ERROR, CORRECT_WORD, START1, data_wait, TRANSMIT2, TRANSMIT2_OFF, data_check, Data_Ready); 
+  FOR shift0: shift USE ENTITY work.shift(shift_arch);  
+  TYPE state_type IS (STATE1,INIT,COUNT_CHECK, A_CHECK, NUM_CHECK, ERROR, CORRECT_WORD, SHIFTER,WAIT_SHIFT, START1, TRANSMIT, TRANSMIT2, TRANSMIT2_OFF, data_check, Data_Ready); 
   SIGNAL curState, nextState: state_type;
 
 
-BEGIN
+BEGIN 
  cnt0: counter PORT MAP(clk, rst0, en0, cnt0Out);
- reg0: reg PORT MAP(clk, regreset0, load0, D0, Q0);
- combi_nextState: PROCESS(curState, rxNow, rxData, cnt0Out)
+ reg0: reg PORT MAP(clk, regreset0, load0, D0, Q0); 
+ shift0: shift PORT MAP(shift_in,en1,load1,clk,shift_out);
  
-   BEGIN
+ combi_nextState: PROCESS(curState, rxNow, rxData, cnt0Out)
+  BEGIN    
     CASE curState IS
 	
 	WHEN STATE1 =>
@@ -123,24 +138,31 @@ BEGIN
 		nextState <= INIT;
 	
 	WHEN CORRECT_WORD =>
-	  if cnt0Out >= "000011" then 
-		nextState <= START1;
+	  if (cnt0Out <= "000011") and (cnt0Out > "000000" ) then
+	  nextState <= SHIFTER;                                 
 	  elsif 
-             cnt0Out < "000011" then 
+             cnt0Out = "000000" then 
 		nextState <= INIT;
 	  else
 	  nextState <= curState;
 	  end if; 
+	
+	
+	
 	  
-	WHEN START1 =>
-	  nextState <= data_wait;
+   WHEN SHIFTER =>
+	 if cnt0Out >= "000100" then 
+	 NextState <= WAIT_SHIFT;        
+	 else  
+	   nextState <= INIT;
+	 end if;
+	
+	WHEN WAIT_SHIFT =>
+	  nextState <= START1;
 
-	WHEN data_wait =>
-	  if dataReady = '1' then 
-		nextState <= TRANSMIT2; 
-	  else 
-	    nextState <= curState;
-          end if;
+	WHEN START1 =>
+	  nextState <= TRANSMIT; 
+	
 		
 	WHEN TRANSMIT2 =>
 	  nextState <= TRANSMIT2_OFF;
@@ -176,8 +198,13 @@ BEGIN
   rst0 <= '0';
   regreset0 <= '0';
   load0 <= '0';
+  load1 <= '0';
   rxdone <= '0';
   txData <= Q0;
+  en1 <= '0';
+  shift_in <= rxdata;
+  start <= '0';
+  numWords_bcd <= shift_out;
   --if curState = INIT then 
   --INITIAL CONDITIONS 
   --end if;
@@ -200,21 +227,26 @@ BEGIN
   if curState = ERROR then 
   rst0 <= '1';
   rxdone <= '1';
+  txData <= Q0;
   end if; 
   
   if curState = CORRECT_WORD then 
-  txData <= Q0;
   en0 <= '1';
-  rxdone <= '1';-- need to find number of clock cycles for when there are 3 numbers. 
+  rxdone <= '1';
+  txData <= Q0;-- need to find number of clock cycles for when there are 3 numbers. 
   end if; 
   
-  if curState = START1 then 
-  start <= '1'; 
-  D0 <= byte; --NNN
+  if curState = SHIFTER then
+  en1 <= '1';
+  end if;
+
+  if curState = WAIT_SHIFT then 
+  load1 <= '1'; 
+  --NNN
   end if; 
   
-  if curState = TRANSMIT2 then 
-  txNow <= '1'; 
+  if curState = START1 then   
+  start <= '1';               
   end if; 
   
   if curState = TRANSMIT2_OFF then 
